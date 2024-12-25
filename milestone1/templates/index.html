@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scraper Chatbot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-2xl font-bold mb-4">Web Scraper Chatbot</h1>
+
+        <!-- URL Input Section -->
+        <div class="bg-white rounded-lg shadow-md p-4 mb-4">
+            <div class="flex flex-col md:flex-row gap-2">
+                <input type="text" id="urlInput" placeholder="Enter URL to scrape (e.g., https://en.wikipedia.org/wiki/ChatGPT)" 
+                       class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <button onclick="scrapeWebsite()" id="scrapeButton"
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none">
+                    Scrape
+                </button>
+            </div>
+            <div id="scrapeStatus" class="mt-2 text-sm"></div>
+        </div>
+
+        <!-- Chat Section -->
+        <div class="bg-white rounded-lg shadow-md p-4">
+            <div id="chatMessages" class="h-[400px] overflow-y-auto mb-4 p-2">
+                <div class="text-gray-500 text-center">
+                    Scrape a website to start chatting!
+                </div>
+            </div>
+            
+            <!-- Question Input -->
+            <div class="flex flex-col md:flex-row gap-2">
+                <input type="text" id="questionInput" placeholder="Ask a question..." 
+                       class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+                       disabled>
+                <button onclick="askQuestion()" id="askButton"
+                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 focus:outline-none"
+                        disabled>
+                    Ask
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isWebsiteScraped = false;
+
+        // Initialize chatbot when page loads
+        window.onload = async function() {
+            try {
+                const response = await fetch('/initialize');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    console.log('Chatbot initialized');
+                } else {
+                    console.error('Failed to initialize chatbot:', data.message);
+                }
+            } catch (error) {
+                console.error('Error initializing chatbot:', error);
+            }
+        };
+
+        function setLoading(isLoading) {
+            const scrapeButton = document.getElementById('scrapeButton');
+            const askButton = document.getElementById('askButton');
+            if (isLoading) {
+                scrapeButton.disabled = true;
+                askButton.disabled = true;
+            } else {
+                scrapeButton.disabled = false;
+                askButton.disabled = !isWebsiteScraped;
+            }
+        }
+
+        async function scrapeWebsite() {
+            const urlInput = document.getElementById('urlInput');
+            const statusDiv = document.getElementById('scrapeStatus');
+            const questionInput = document.getElementById('questionInput');
+            
+            if (!urlInput.value.trim()) {
+                statusDiv.innerHTML = '<span class="text-red-500">Please enter a URL</span>';
+                return;
+            }
+
+            setLoading(true);
+            statusDiv.innerHTML = '<span class="text-blue-500">Scraping website... Please wait...</span>';
+            
+            try {
+                const response = await fetch('/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: urlInput.value.trim() }),
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    statusDiv.innerHTML = `<span class="text-green-500">${data.message}</span>`;
+                    isWebsiteScraped = true;
+                    questionInput.disabled = false;
+                    document.getElementById('chatMessages').innerHTML = '';
+                } else {
+                    statusDiv.innerHTML = `<span class="text-red-500">Error: ${data.message}</span>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function askQuestion() {
+            if (!isWebsiteScraped) {
+                alert('Please scrape a website first!');
+                return;
+            }
+            
+            const questionInput = document.getElementById('questionInput');
+            const chatMessages = document.getElementById('chatMessages');
+            const question = questionInput.value.trim();
+            
+            if (!question) return;
+            
+            setLoading(true);
+            
+            // Add user message
+            chatMessages.innerHTML += `
+                <div class="mb-4">
+                    <div class="font-bold text-gray-700">You:</div>
+                    <div class="bg-gray-100 rounded-lg p-3">${question}</div>
+                </div>
+            `;
+            
+            questionInput.value = '';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question }),
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    chatMessages.innerHTML += `
+                        <div class="mb-4">
+                            <div class="font-bold text-blue-600">Chatbot:</div>
+                            <div class="bg-blue-50 rounded-lg p-3">${data.answer}</div>
+                        </div>
+                    `;
+                } else {
+                    chatMessages.innerHTML += `
+                        <div class="mb-4">
+                            <div class="font-bold text-red-600">Error:</div>
+                            <div class="bg-red-50 rounded-lg p-3">${data.message}</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                chatMessages.innerHTML += `
+                    <div class="mb-4">
+                        <div class="font-bold text-red-600">Error:</div>
+                        <div class="bg-red-50 rounded-lg p-3">${error.message}</div>
+                    </div>
+                `;
+            } finally {
+                setLoading(false);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        // Handle Enter key in question input
+        document.getElementById('questionInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey && !this.disabled) {
+                e.preventDefault();
+                askQuestion();
+            }
+        });
+
+        // Handle Enter key in URL input
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                scrapeWebsite();
+            }
+        });
+    </script>
+</body>
+</html>
